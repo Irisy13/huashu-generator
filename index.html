@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>话术生成器 · 有道领世</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#1a1714;--ink-2:#3d3830;--ink-3:#7a7268;--ink-4:#b5afa6;
+  --paper:#f7f4ef;--paper-2:#ede9e2;--paper-3:#e2ddd5;
+  --accent:#c84b2f;--accent-light:#f5e8e4;
+  --green:#2a6b4a;--green-light:#e3eeea;
+  --amber:#8a5c1a;--amber-light:#f5eed9;
+  --blue:#1e4d7a;--blue-light:#e2ecf5;
+  --r:8px;
+  --shadow:0 2px 12px rgba(26,23,20,.08),0 1px 3px rgba(26,23,20,.06);
+  --shadow-lg:0 8px 32px rgba(26,23,20,.12),0 2px 8px rgba(26,23,20,.08);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Serif SC','PingFang SC',serif;background:var(--paper);color:var(--ink);min-height:100vh;font-size:14px;line-height:1.6;}
+
+/* HEADER */
+.header{background:var(--ink);color:var(--paper);padding:18px 32px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;box-shadow:0 2px 16px rgba(0,0,0,.25);}
+.header-logo{width:32px;height:32px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0;}
+.header-title{font-size:16px;font-weight:600;letter-spacing:.02em;}
+.header-sub{font-size:12px;color:var(--ink-4);margin-top:1px;font-family:'JetBrains Mono',monospace;}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.api-badge{font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);}
+.api-badge.ok{border-color:#4caf7d;color:#4caf7d;}
+.hdr-btn{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-family:inherit;}
+.hdr-btn:hover{border-color:rgba(255,255,255,.5);color:#fff;}
+
+/* LAYOUT */
+.layout{max-width:1200px;margin:0 auto;padding:28px 24px;display:grid;grid-template-columns:1fr 420px;gap:24px;align-items:start;}
+
+/* PANEL */
+.panel{background:#fff;border:1px solid var(--paper-3);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;margin-bottom:16px;}
+.panel:last-child{margin-bottom:0;}
+.panel-head{padding:14px 20px;border-bottom:1px solid var(--paper-2);display:flex;align-items:center;gap:10px;}
+.panel-head-num{width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;font-family:'JetBrains Mono',monospace;}
+.panel-head-title{font-size:13px;font-weight:600;}
+.panel-head-sub{font-size:11px;color:var(--ink-3);margin-left:auto;}
+.panel-body{padding:18px 20px;}
+
+/* TYPE TABS */
+.type-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:20px;}
+.type-tab{padding:10px 8px;border-radius:6px;border:1.5px solid var(--paper-3);background:var(--paper);cursor:pointer;text-align:center;transition:all .15s;}
+.type-tab:hover{border-color:var(--ink-3);background:var(--paper-2);}
+.type-tab.active{border-color:var(--ink);background:var(--ink);color:#fff;}
+.tt-badge{font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;display:inline-block;margin-bottom:4px;}
+.type-tab.t0 .tt-badge{background:var(--paper-3);color:var(--ink-2);}
+.type-tab.t1a .tt-badge{background:var(--green-light);color:var(--green);}
+.type-tab.t1b .tt-badge{background:var(--amber-light);color:var(--amber);}
+.type-tab.t2 .tt-badge{background:var(--accent-light);color:var(--accent);}
+.type-tab.active .tt-badge{background:rgba(255,255,255,.2);color:#fff;}
+.tt-name{font-size:12px;font-weight:600;display:block;}
+.tt-desc{font-size:10px;color:var(--ink-3);margin-top:2px;line-height:1.3;}
+.type-tab.active .tt-desc,.type-tab.active .tt-name{color:rgba(255,255,255,.8);}
+
+/* LABELS */
+.sec-label{font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;margin-top:16px;}
+.sec-label:first-child{margin-top:0;}
+
+/* TEXTAREA */
+.kw-input{width:100%;padding:10px 14px;border:1.5px solid var(--paper-3);border-radius:6px;font-family:inherit;font-size:13px;background:var(--paper);color:var(--ink);outline:none;transition:border-color .15s;resize:none;line-height:1.5;}
+.kw-input:focus{border-color:var(--ink);background:#fff;}
+.kw-hint{font-size:11px;color:var(--ink-4);margin-bottom:14px;line-height:1.5;}
+
+/* CHIPS */
+.chip-group{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;}
+.chip{padding:5px 11px;border-radius:20px;border:1.5px solid var(--paper-3);background:var(--paper);font-size:12px;color:var(--ink-2);cursor:pointer;transition:all .12s;user-select:none;font-family:inherit;}
+.chip:hover{border-color:var(--ink-3);color:var(--ink);}
+.chip.sel-node{border-color:var(--blue);background:var(--blue-light);color:var(--blue);}
+.chip.sel-crisis{border-color:var(--green);background:var(--green-light);color:var(--green);}
+.chip.sel-hook{border-color:var(--amber);background:var(--amber-light);color:var(--amber);}
+.chip.sel-product{border-color:var(--accent);background:var(--accent-light);color:var(--accent);}
+
+/* FIELDS */
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px;}
+.field-row.triple{grid-template-columns:1fr 1fr 1fr;}
+.field label{font-size:11px;color:var(--ink-3);display:block;margin-bottom:4px;}
+.field select,.field input[type=text]{width:100%;padding:8px 12px;border:1.5px solid var(--paper-3);border-radius:6px;font-family:inherit;font-size:12px;background:var(--paper);color:var(--ink);outline:none;cursor:pointer;transition:border-color .15s;appearance:none;-webkit-appearance:none;}
+.field select:focus,.field input[type=text]:focus{border-color:var(--ink);background:#fff;}
+.field input::placeholder{color:var(--ink-4);}
+
+/* EXTRA FIELDS */
+#extra-fields{margin-top:12px;display:none;}
+#extra-fields.show{display:block;}
+
+/* GEN BTN */
+.gen-btn{width:100%;padding:13px;background:var(--ink);color:#fff;border:none;border-radius:7px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;margin-top:20px;letter-spacing:.03em;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;}
+.gen-btn:hover{background:var(--ink-2);transform:translateY(-1px);box-shadow:var(--shadow);}
+.gen-btn:active{transform:translateY(0);}
+.gen-btn.loading{pointer-events:none;background:var(--ink-2);}
+.btn-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none;}
+.gen-btn.loading .btn-spinner{display:block;}
+.gen-btn.loading .btn-text{opacity:.6;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* OUTPUT */
+.out-panel{position:sticky;top:88px;}
+.out-empty{padding:48px 24px;text-align:center;color:var(--ink-4);}
+.out-empty-icon{font-size:36px;margin-bottom:12px;opacity:.4;}
+.out-empty-text{font-size:13px;line-height:1.7;}
+.out-result{display:none;}
+.out-result.show{display:block;}
+.result-meta{padding:14px 20px;background:var(--paper);border-bottom:1px solid var(--paper-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.meta-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;}
+.meta-t0{background:var(--paper-3);color:var(--ink-2);}
+.meta-t1a{background:var(--green-light);color:var(--green);}
+.meta-t1b{background:var(--amber-light);color:var(--amber);}
+.meta-t2{background:var(--accent-light);color:var(--accent);}
+.meta-dim{font-size:10px;padding:2px 6px;border-radius:8px;background:var(--paper-2);color:var(--ink-3);}
+.meta-count{font-size:11px;color:var(--ink-4);margin-left:auto;font-family:'JetBrains Mono',monospace;}
+.result-body{padding:20px;}
+.result-text{font-size:14px;line-height:1.85;color:var(--ink);white-space:pre-wrap;min-height:80px;}
+.result-text.streaming::after{content:'▊';animation:blink .6s step-end infinite;color:var(--accent);}
+@keyframes blink{50%{opacity:0;}}
+.result-actions{padding:12px 20px;border-top:1px solid var(--paper-2);display:flex;gap:8px;}
+.action-btn{flex:1;padding:8px;border:1.5px solid var(--paper-3);border-radius:6px;background:transparent;font-family:inherit;font-size:12px;color:var(--ink-2);cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center;gap:5px;}
+.action-btn:hover{border-color:var(--ink-3);color:var(--ink);background:var(--paper);}
+.action-btn.copy-ok{border-color:var(--green);color:var(--green);background:var(--green-light);}
+
+/* HISTORY */
+.hist-item{padding:10px 14px;background:var(--paper);border:1px solid var(--paper-3);border-radius:6px;margin-bottom:6px;cursor:pointer;transition:all .12s;}
+.hist-item:hover{border-color:var(--ink-3);background:var(--paper-2);}
+.hist-meta{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+.hist-time{font-size:10px;color:var(--ink-4);font-family:'JetBrains Mono',monospace;margin-left:auto;}
+.hist-preview{font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* DIVIDER */
+.divider{border:none;border-top:1px solid var(--paper-2);margin:16px 0;}
+
+/* ID WRAP */
+.id-wrap{margin-top:10px;padding:10px 12px;background:var(--blue-light);border-radius:6px;border:1px solid #c5d9ed;display:none;}
+.id-wrap.show{display:block;}
+.id-label{font-size:11px;color:var(--blue);font-weight:600;margin-bottom:6px;}
+.id-tags{display:flex;flex-wrap:wrap;gap:4px;}
+.id-tag{font-size:11px;padding:2px 7px;border-radius:8px;background:rgba(30,77,122,.12);color:var(--blue);}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(26,23,20,.6);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;}
+.modal-overlay.hidden{display:none;}
+.modal{background:#fff;border-radius:12px;padding:32px;width:500px;max-width:92vw;box-shadow:var(--shadow-lg);}
+.modal-title{font-size:17px;font-weight:700;margin-bottom:8px;}
+.modal-sub{font-size:13px;color:var(--ink-3);margin-bottom:20px;line-height:1.6;}
+
+/* MODEL CARDS */
+.model-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px;}
+.model-card{border:2px solid var(--paper-3);border-radius:8px;padding:12px 10px;cursor:pointer;text-align:center;transition:all .15s;background:var(--paper);}
+.model-card:hover{border-color:var(--ink-3);}
+.model-card.active{border-color:var(--ink);background:var(--ink);color:#fff;}
+.mc-icon{font-size:20px;margin-bottom:4px;}
+.mc-name{font-size:12px;font-weight:600;display:block;}
+.mc-sub{font-size:10px;color:var(--ink-4);margin-top:2px;line-height:1.3;}
+.model-card.active .mc-sub{color:rgba(255,255,255,.6);}
+
+.modal-field{margin-bottom:14px;}
+.modal-field label{font-size:12px;color:var(--ink-3);display:block;margin-bottom:5px;}
+.modal-field input{width:100%;padding:10px 14px;border:1.5px solid var(--paper-3);border-radius:7px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink);outline:none;background:var(--paper);}
+.modal-field input:focus{border-color:var(--ink);background:#fff;}
+.modal-field input::placeholder{color:var(--ink-4);font-family:'Noto Serif SC',serif;font-size:12px;}
+.modal-note{font-size:11px;color:var(--ink-4);margin-top:5px;line-height:1.5;}
+
+.modal-row{display:flex;gap:10px;}
+.modal-btn{flex:1;padding:12px;background:var(--ink);color:#fff;border:none;border-radius:7px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s;}
+.modal-btn:hover{background:var(--ink-2);}
+.modal-btn.ghost{background:transparent;border:1.5px solid var(--paper-3);color:var(--ink-2);}
+.modal-btn.ghost:hover{border-color:var(--ink-3);background:var(--paper);}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;background:var(--ink);color:#fff;border-radius:8px;font-size:13px;box-shadow:var(--shadow-lg);z-index:300;opacity:0;transform:translateY(8px);transition:all .2s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);}
+
+/* PROVIDER BADGE */
+.provider-tag{font-size:10px;padding:2px 7px;border-radius:8px;font-family:'JetBrains Mono',monospace;}
+.pv-anthropic{background:#e8e4f8;color:#4a3a8c;}
+.pv-deepseek{background:#e0f0f8;color:#1a5a8c;}
+.pv-openai{background:#e8f5ee;color:#1a6b3a;}
+.pv-kimi{background:#f5e8f0;color:#7a1a5a;}
+.pv-qwen{background:#fdf0e0;color:#8c4a1a;}
+
+@media(max-width:860px){
+  .layout{grid-template-columns:1fr;}
+  .out-panel{position:static;}
+  .type-tabs{grid-template-columns:repeat(2,1fr);}
+  .field-row{grid-template-columns:1fr;}
+  .field-row.triple{grid-template-columns:1fr 1fr;}
+  .model-grid{grid-template-columns:repeat(3,1fr);}
+}
+</style>
+</head>
+<body>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-title">配置 AI 模型</div>
+    <div class="modal-sub">选择你使用的 AI 服务商，输入对应的 API Key。Key 仅保存在本地浏览器，不会上传到任何服务器。</div>
+
+    <div class="model-grid" id="model-grid">
+      <div class="model-card active" data-provider="anthropic" onclick="selectProvider('anthropic',this)">
+        <div class="mc-icon">🔮</div>
+        <span class="mc-name">Claude</span>
+        <div class="mc-sub">Anthropic<br>质量最优</div>
+      </div>
+      <div class="model-card" data-provider="deepseek" onclick="selectProvider('deepseek',this)">
+        <div class="mc-icon">🐋</div>
+        <span class="mc-name">DeepSeek</span>
+        <div class="mc-sub">国内直连<br>性价比极高</div>
+      </div>
+      <div class="model-card" data-provider="kimi" onclick="selectProvider('kimi',this)">
+        <div class="mc-icon">🌙</div>
+        <span class="mc-name">Kimi</span>
+        <div class="mc-sub">月之暗面<br>国内直连</div>
+      </div>
+      <div class="model-card" data-provider="qwen" onclick="selectProvider('qwen',this)">
+        <div class="mc-icon">🌊</div>
+        <span class="mc-name">通义千问</span>
+        <div class="mc-sub">阿里云<br>国内直连</div>
+      </div>
+      <div class="model-card" data-provider="openai" onclick="selectProvider('openai',this)">
+        <div class="mc-icon">⚡</div>
+        <span class="mc-name">OpenAI</span>
+        <div class="mc-sub">GPT-4o<br>需代理</div>
+      </div>
+      <div class="model-card" data-provider="zhipu" onclick="selectProvider('zhipu',this)">
+        <div class="mc-icon">🧠</div>
+        <span class="mc-name">智谱 GLM</span>
+        <div class="mc-sub">GLM-4<br>国内直连</div>
+      </div>
+    </div>
+
+    <div class="modal-field">
+      <label id="key-label">API Key（Anthropic）</label>
+      <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off">
+      <div class="modal-note" id="key-note">在 <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue)">console.anthropic.com</a> 获取 Key</div>
+    </div>
+
+    <div class="modal-row">
+      <button class="modal-btn ghost" onclick="skipKey()">暂时跳过</button>
+      <button class="modal-btn" onclick="saveKey()">保存并开始使用</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<header class="header">
+  <div class="header-logo">话</div>
+  <div>
+    <div class="header-title">话术生成器</div>
+    <div class="header-sub">有道领世 · 高中销售话术 · Demo v1.1</div>
+  </div>
+  <div class="header-right">
+    <div class="api-badge" id="api-status">未配置</div>
+    <button class="hdr-btn" onclick="openModal()">⚙ 模型设置</button>
+  </div>
+</header>
+
+<div class="layout">
+  <div>
+    <!-- 快捷输入 -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-num">⚡</div>
+        <div class="panel-head-title">快捷输入</div>
+        <div class="panel-head-sub">描述场景，自动识别维度</div>
+      </div>
+      <div class="panel-body">
+        <textarea class="kw-input" id="kw-input" rows="3"
+          placeholder="例：要考试了，有学员数学提了30分，回复可领高考真题解析&#10;例：高三封班，今晚23点截止，最后3个名额&#10;例：截杀话术 / 激活话术 / 维护话术"
+          oninput="autoDetect()"></textarea>
+        <div class="kw-hint">⌘+Enter 快速生成 · 支持自然语言，也可直接输入类型名称</div>
+        <div class="id-wrap" id="id-wrap">
+          <div class="id-label">🔍 自动识别到以下维度</div>
+          <div class="id-tags" id="id-tags"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 精准配置 -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-num">⚙</div>
+        <div class="panel-head-title">精准配置</div>
+        <div class="panel-head-sub">多选维度组合生成</div>
+      </div>
+      <div class="panel-body">
+        <div class="sec-label">话术类型</div>
+        <div class="type-tabs">
+          <div class="type-tab t0" onclick="selectType('t0',this)"><span class="tt-badge">类型0</span><span class="tt-name">维护</span><span class="tt-desc">纯关怀/给予</span></div>
+          <div class="type-tab t1a active" onclick="selectType('t1a',this)"><span class="tt-badge">类型1a</span><span class="tt-name">蓄水激活</span><span class="tt-desc">有危机+钩子</span></div>
+          <div class="type-tab t1b" onclick="selectType('t1b',this)"><span class="tt-badge">类型1b</span><span class="tt-name">软截杀</span><span class="tt-desc">弱产品节点</span></div>
+          <div class="type-tab t2" onclick="selectType('t2',this)"><span class="tt-badge">类型2</span><span class="tt-name">硬截杀</span><span class="tt-desc">强截止感</span></div>
+        </div>
+
+        <div class="sec-label">用户节点 <span style="font-weight:400;text-transform:none;color:var(--ink-4);">可多选</span></div>
+        <div class="chip-group">
+          <div class="chip" data-group="node" onclick="toggleChip(this)">考试节点</div>
+          <div class="chip" data-group="node" onclick="toggleChip(this)">放假节点</div>
+          <div class="chip" data-group="node" onclick="toggleChip(this)">出分季</div>
+          <div class="chip" data-group="node" onclick="toggleChip(this)">升学衔接</div>
+          <div class="chip" data-group="node" onclick="toggleChip(this)">开课节点</div>
+        </div>
+
+        <div class="sec-label" style="margin-top:14px;">营造危机维度 <span style="font-weight:400;text-transform:none;color:var(--ink-4);">1-2个为佳，最多3个</span></div>
+        <div class="chip-group">
+          <div class="chip" data-group="crisis" onclick="toggleChip(this)">升学政策</div>
+          <div class="chip" data-group="crisis" onclick="toggleChip(this)">年级特点</div>
+          <div class="chip" data-group="crisis" onclick="toggleChip(this)">学科学情</div>
+          <div class="chip" data-group="crisis" onclick="toggleChip(this)">学员故事</div>
+          <div class="chip" data-group="crisis" onclick="toggleChip(this)">竞争对比</div>
+          <div class="chip" data-group="crisis" onclick="toggleChip(this)">亲子关系</div>
+        </div>
+
+        <div class="sec-label" style="margin-top:14px;">钩子/抓手 <span style="font-weight:400;text-transform:none;color:var(--ink-4);">激活必选</span></div>
+        <div class="chip-group">
+          <div class="chip" data-group="hook" onclick="toggleChip(this)">电子学习资料</div>
+          <div class="chip" data-group="hook" onclick="toggleChip(this)">学习计划</div>
+          <div class="chip" data-group="hook" onclick="toggleChip(this)">试卷分析服务</div>
+          <div class="chip" data-group="hook" onclick="toggleChip(this)">29元体验课</div>
+          <div class="chip" data-group="hook" onclick="toggleChip(this)">师资品牌背书</div>
+          <div class="chip" data-group="hook" onclick="toggleChip(this)">退费保障</div>
+        </div>
+
+        <div class="sec-label" style="margin-top:14px;">产品节点 <span style="font-weight:400;text-transform:none;color:var(--ink-4);">截杀类必选</span></div>
+        <div class="chip-group">
+          <div class="chip" data-group="product" onclick="toggleChip(this)">封班/名额有限</div>
+          <div class="chip" data-group="product" onclick="toggleChip(this)">涨价截止</div>
+          <div class="chip" data-group="product" onclick="toggleChip(this)">赠礼/赠课截止</div>
+          <div class="chip" data-group="product" onclick="toggleChip(this)">开售/早鸟</div>
+          <div class="chip" data-group="product" onclick="toggleChip(this)">开课倒计时</div>
+          <div class="chip" data-group="product" onclick="toggleChip(this)">决策降门槛</div>
+        </div>
+
+        <div id="extra-fields">
+          <div class="field-row" style="margin-top:12px;">
+            <div class="field"><label>截止时间（硬截杀必填）</label><input type="text" id="deadline-time" placeholder="如：今晚23:59"></div>
+            <div class="field"><label>稀缺数字（推荐）</label><input type="text" id="scarcity-num" placeholder="如：最后3个名额"></div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="sec-label">精准参数 <span style="font-weight:400;text-transform:none;color:var(--ink-4);">可选</span></div>
+        <div class="field-row triple">
+          <div class="field"><label>年级</label>
+            <select id="sel-grade"><option value="">通用</option><option>新高一</option><option>高一上</option><option>高一下</option><option>高二上</option><option>高二下</option><option>高三上</option><option>高三下</option></select>
+          </div>
+          <div class="field"><label>分数段</label>
+            <select id="sel-score"><option value="">通用</option><option>450以下</option><option>450-550</option><option>550-620</option><option>620+</option></select>
+          </div>
+          <div class="field"><label>学科</label>
+            <select id="sel-subject"><option value="">不限</option><option>数学</option><option>物理</option><option>化学</option><option>英语</option><option>语文</option><option>生物</option><option>全科</option></select>
+          </div>
+        </div>
+        <div class="field-row" style="margin-top:10px;">
+          <div class="field"><label>受众端</label>
+            <select id="sel-audience"><option>家长端</option><option>学生端</option></select>
+          </div>
+          <div class="field"><label>话术风格</label>
+            <select id="sel-style"><option value="">自动匹配</option><option>朋友关怀型</option><option>专家顾问型</option><option>内部人型</option><option>励志价值观型</option></select>
+          </div>
+        </div>
+
+        <button class="gen-btn" id="gen-btn" onclick="generate()">
+          <div class="btn-spinner" id="btn-spinner"></div>
+          <span class="btn-text" id="btn-text">✦ 生成话术</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OUTPUT -->
+  <div class="out-panel">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-num">✦</div>
+        <div class="panel-head-title">生成结果</div>
+        <div class="panel-head-sub" id="out-count">—</div>
+      </div>
+      <div class="out-empty" id="out-empty">
+        <div class="out-empty-icon">✍</div>
+        <div class="out-empty-text">在左侧选择维度<br>或直接输入关键词描述场景<br>点击「生成话术」即可获得结果</div>
+      </div>
+      <div class="out-result" id="out-result">
+        <div class="result-meta" id="result-meta"></div>
+        <div class="result-body">
+          <div class="result-text" id="result-text"></div>
+        </div>
+        <div class="result-actions">
+          <button class="action-btn" id="copy-btn" onclick="copyResult()"><span>📋</span><span>复制话术</span></button>
+          <button class="action-btn" onclick="generate()"><span>🔄</span><span>再生成</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="history-panel" style="display:none;">
+      <div class="panel-head">
+        <div class="panel-head-num">📂</div>
+        <div class="panel-head-title">本次记录</div>
+        <div class="panel-head-sub" id="hist-count">0 条</div>
+      </div>
+      <div class="panel-body" style="padding:12px 16px;">
+        <div id="history-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── PROVIDER CONFIG ──
+const PROVIDERS = {
+  anthropic: {
+    name:'Claude (Anthropic)', icon:'🔮',
+    endpoint:'https://api.anthropic.com/v1/messages',
+    model:'claude-sonnet-4-20250514',
+    keyPlaceholder:'sk-ant-...',
+    keyHint:'在 console.anthropic.com 获取',
+    keyHintUrl:'https://console.anthropic.com',
+    tagClass:'pv-anthropic',
+    isOpenAICompat: false
+  },
+  deepseek: {
+    name:'DeepSeek', icon:'🐋',
+    endpoint:'https://api.deepseek.com/v1/chat/completions',
+    model:'deepseek-chat',
+    keyPlaceholder:'sk-...',
+    keyHint:'在 platform.deepseek.com 获取，国内直连，价格极低',
+    keyHintUrl:'https://platform.deepseek.com',
+    tagClass:'pv-deepseek',
+    isOpenAICompat: true
+  },
+  kimi: {
+    name:'Kimi (月之暗面)', icon:'🌙',
+    endpoint:'https://api.moonshot.cn/v1/chat/completions',
+    model:'moonshot-v1-8k',
+    keyPlaceholder:'sk-...',
+    keyHint:'在 platform.moonshot.cn 获取，国内直连',
+    keyHintUrl:'https://platform.moonshot.cn',
+    tagClass:'pv-kimi',
+    isOpenAICompat: true
+  },
+  qwen: {
+    name:'通义千问 (阿里云)', icon:'🌊',
+    endpoint:'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    model:'qwen-plus',
+    keyPlaceholder:'sk-...',
+    keyHint:'在 dashscope.aliyun.com 获取，国内直连',
+    keyHintUrl:'https://dashscope.aliyun.com',
+    tagClass:'pv-qwen',
+    isOpenAICompat: true
+  },
+  openai: {
+    name:'OpenAI GPT', icon:'⚡',
+    endpoint:'https://api.openai.com/v1/chat/completions',
+    model:'gpt-4o',
+    keyPlaceholder:'sk-...',
+    keyHint:'在 platform.openai.com 获取，需要代理访问',
+    keyHintUrl:'https://platform.openai.com',
+    tagClass:'pv-openai',
+    isOpenAICompat: true
+  },
+  zhipu: {
+    name:'智谱 GLM', icon:'🧠',
+    endpoint:'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    model:'glm-4-flash',
+    keyPlaceholder:'...',
+    keyHint:'在 open.bigmodel.cn 获取，国内直连，有免费额度',
+    keyHintUrl:'https://open.bigmodel.cn',
+    tagClass:'pv-zhipu',
+    isOpenAICompat: true
+  }
+};
+
+// ── STATE ──
+let selectedType = 't1a';
+let currentProvider = localStorage.getItem('yd_provider') || 'anthropic';
+let apiKey = localStorage.getItem('yd_api_key_' + currentProvider) || '';
+let history = [];
+
+// ── SYSTEM PROMPT ──
+const SYSTEM_PROMPT = `你是一位专注于高中在线教育领域的资深销售话术专家，服务于有道领世等头部在线教育机构。你深度理解高中学生及其家长的核心焦虑，能生成自然、有效、不显推销感的微信群发话术。
+
+## 话术分类
+- 维护话术：无危机无产品，纯关怀或价值给予，50-100字
+- 蓄水激活：用户节点+危机维度（1-2个）+钩子，无截止感，100-200字
+- 软截杀：节点+危机+钩子+弱产品节点（无截止时间），150-250字
+- 硬截杀：（可选节点/危机）+强产品节点（含具体时间/名额），60-150字
+
+## 危机维度
+**年级特点**：新高一初高中断层/正金字塔；高一下高二两极分化起点；高二知识密度暴增占高考90%+；高三上一轮复习战略价值；高三下高考倒计时/211→985关键分差
+**学科学情**：数学100分以下=知识漏洞；数学120+导数/圆锥曲线瓶颈；物理70分以下力学→电磁感应断层；英语完形填空/7选5技巧
+**学员故事**：必须含年级+入学分数→提升后分数+时长；类型：数字提分/逆袭反差/家庭共情/权威背书
+**竞争对比**：班上同学已在学/23位家长已报/早报名被抢跑
+**亲子关系**：孩子不主动/叛逆/听懂做不会/网课摸鱼
+**升学政策**：高考命题趋势/选科赋分/录取位次
+
+## 钩子类型
+电子资料（真题/笔记/视频）、学习计划、试卷分析、29元体验课（原价299）、师资背书（一本率95.28%/700+学员25人）、退费保障（15天全退）
+
+## 产品节点
+稀缺感：封班（最后X个名额）；时间压力：涨价（今晚X点）/赠课截止；开售：早鸟期/预报名；降门槛：15天全退/29元入口
+
+## 微信表情使用规范（核心技巧，必须执行）
+
+表情有三个功能：①段落标记（替代数字序号）②情绪放大器 ③行动指引
+
+**行动指令前必须用 👉 或 👇 引导。**
+
+各类型配置标准：
+- 维护话术：💓/💕/💘 开头暖场，1-2个表情，禁用🚨❗⚠
+- 蓄水激活：2-4个表情，🎉🚀渲染成功案例，✅列举内容，👉引导行动
+- 软截杀：3-5个表情，✅卖点+🎁赠礼+🌟亮点分布均匀，👉收口
+- 硬截杀：1-3个表情，⚠/❗/🔥/⏰开头制造紧迫，极简有力，👉行动
+
+段落标记系统（用表情代替无聊的1.2.3.列表）：
+✅ 列举产品卖点/服务内容，每条前置✅
+🎁 列举赠礼内容
+🚀 展示提分数据（格式：🚀 数学87分→131分）
+💤 说明步骤流程
+
+常用表情对应场景：
+👉👇 行动指引 | ✅🌟✨ 卖点/亮点 | 🎁 赠礼 | 🔥💥 重点强调
+💓💕💘❤ 温暖关怀 | 🎉🚀🏅💯 成功喜报 | ⚠❗⏰🚨 紧迫危机
+💪🙌👍 激励鼓励 | 🎯🔍 精准/分析
+
+表情禁止项：
+❌ 表情放在句子中间（破坏阅读流）
+❌ 连续3个以上同类表情（如🎉🎉🎉）
+❌ 危机激活内容里用😊😂等快乐表情
+❌ ❗❗❗连续感叹号（单个❗即可）
+❌ 同一段话超过5种表情
+
+## 其他禁止项
+❌ "我联系您是想说报名的事"（身份暴露）
+❌ "不是催您/不是为了让您报名"（免责否认）
+❌ "对了/顺便/话说回来"（硬转词）
+❌ 截止时间模糊（"即将/很快"无效，必须是具体时间）
+❌ 行动指令超20字 ❌ 危机维度超3个
+
+## 输出要求
+直接输出话术正文，不加任何解释或标注，口语化自然，行动指令前置👉，格式：回复【数字】或【年级+科目】`;
+
+// ── INIT ──
+document.addEventListener('DOMContentLoaded', () => {
+  // 检查是否有任何provider的key
+  const hasKey = Object.keys(PROVIDERS).some(p => localStorage.getItem('yd_api_key_'+p));
+  if (!hasKey) {
+    openModal();
+  } else {
+    updateApiStatus();
+  }
+  updateTypeUI();
+  // 恢复上次选择的provider
+  document.querySelectorAll('.model-card').forEach(c => {
+    c.classList.toggle('active', c.dataset.provider === currentProvider);
+  });
+  updateKeyFields();
+});
+
+// ── MODAL ──
+function openModal() {
+  document.getElementById('modal').classList.remove('hidden');
+  document.getElementById('api-key-input').value = localStorage.getItem('yd_api_key_'+currentProvider) || '';
+}
+function skipKey() { document.getElementById('modal').classList.add('hidden'); }
+
+function selectProvider(pv, el) {
+  currentProvider = pv;
+  document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  updateKeyFields();
+  // load saved key for this provider
+  document.getElementById('api-key-input').value = localStorage.getItem('yd_api_key_'+pv) || '';
+}
+
+function updateKeyFields() {
+  const pv = PROVIDERS[currentProvider];
+  document.getElementById('key-label').textContent = `API Key（${pv.name}）`;
+  document.getElementById('api-key-input').placeholder = pv.keyPlaceholder;
+  document.getElementById('key-note').innerHTML =
+    `在 <a href="${pv.keyHintUrl}" target="_blank" style="color:var(--blue)">${pv.keyHintUrl.replace('https://','')}</a> 获取 · ${pv.keyHint.split('，').slice(-1)[0] || pv.keyHint}`;
+}
+
+function cleanKey(raw) {
+  // 只保留可打印 ASCII（0x20–0x7E），去除所有空白、不可见字符、中文标点等
+  return raw.replace(/[^\x20-\x7E]/g, '').trim();
+}
+
+function saveKey() {
+  const raw = document.getElementById('api-key-input').value;
+  const val = cleanKey(raw);
+  if (!val) { showToast('请输入有效的 API Key'); return; }
+  if (val !== raw.trim()) {
+    showToast('⚠ Key 中含非法字符，已自动清理');
+  }
+  localStorage.setItem('yd_api_key_' + currentProvider, val);
+  localStorage.setItem('yd_provider', currentProvider);
+  apiKey = val;
+  document.getElementById('modal').classList.add('hidden');
+  updateApiStatus();
+  showToast('✓ 已保存 ' + PROVIDERS[currentProvider].name);
+}
+
+function updateApiStatus() {
+  currentProvider = localStorage.getItem('yd_provider') || 'anthropic';
+  apiKey = localStorage.getItem('yd_api_key_' + currentProvider) || '';
+  const el = document.getElementById('api-status');
+  if (apiKey) {
+    const pv = PROVIDERS[currentProvider];
+    el.textContent = '● ' + pv.name.split(' ')[0];
+    el.className = 'api-badge ok';
+  } else {
+    el.textContent = '未配置';
+    el.className = 'api-badge';
+  }
+}
+
+// ── TYPE ──
+function selectType(type, el) {
+  selectedType = type;
+  document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  updateTypeUI();
+}
+function updateTypeUI() {
+  document.getElementById('extra-fields').className = selectedType === 't2' ? 'show' : '';
+}
+
+// ── CHIPS ──
+function toggleChip(el) {
+  const group = el.dataset.group;
+  const sc = 'sel-' + group;
+  if (group === 'crisis' && !el.classList.contains(sc)) {
+    if (document.querySelectorAll('.chip.sel-crisis').length >= 3) { showToast('危机维度最多选3个'); return; }
+  }
+  el.classList.toggle(sc);
+}
+function getSelected(group) {
+  return [...document.querySelectorAll('.chip.sel-'+group)].map(e => e.textContent);
+}
+
+// ── AUTO DETECT ──
+function autoDetect() {
+  const text = document.getElementById('kw-input').value;
+  if (!text.trim()) { document.getElementById('id-wrap').classList.remove('show'); return; }
+  const detected = [];
+  const rules = [
+    [/考试|月考|期中|期末|高考|模拟/, '考试节点'],
+    [/放假|暑假|寒假|五一|国庆|假期|周末/, '放假节点'],
+    [/出分|成绩公布/, '出分季'],
+    [/中考|初升高|新高一|升学|衔接/, '升学衔接'],
+    [/开课|开学/, '开课节点'],
+    [/政策|命题|选科|录取|强基/, '升学政策'],
+    [/年级|高一|高二|高三|阶段|分水岭/, '年级特点'],
+    [/分数|分段|知识|学科|数学|物理|化学|英语|语文/, '学科学情'],
+    [/学员|同学|案例|提了|提升|提分|喜报/, '学员故事'],
+    [/同学在学|已报|被抢|被甩/, '竞争对比'],
+    [/孩子|叛逆|不学|厌学|主动/, '亲子关系'],
+    [/资料|真题|笔记|思维导图|视频|解题|素材/, '电子学习资料'],
+    [/体验课|试听|29元/, '29元体验课'],
+    [/退费|退款|无忧|全退/, '退费保障'],
+  ];
+  rules.forEach(([re, name]) => { if (re.test(text)) detected.push(name); });
+
+  // auto switch type
+  if (/封班|涨价|截止|优惠|早鸟|赠课/.test(text)) {
+    if (/今晚|今天|23:|24点|23点|48小时/.test(text)) switchTypeTo('t2');
+    else switchTypeTo('t1b');
+    detected.push('产品节点');
+  }
+  if (/^激活/.test(text.trim())) switchTypeTo('t1a');
+  if (/^维护|^问候/.test(text.trim())) switchTypeTo('t0');
+
+  if (detected.length) {
+    document.getElementById('id-wrap').classList.add('show');
+    document.getElementById('id-tags').innerHTML = detected.map(d => `<span class="id-tag">${d}</span>`).join('');
+  } else {
+    document.getElementById('id-wrap').classList.remove('show');
+  }
+}
+function switchTypeTo(type) {
+  selectedType = type;
+  document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.type-tab.' + type).classList.add('active');
+  updateTypeUI();
+}
+
+// ── BUILD PROMPT ──
+function buildUserPrompt() {
+  const kw = document.getElementById('kw-input').value.trim();
+  const nodes = getSelected('node'), crisis = getSelected('crisis');
+  const hooks = getSelected('hook'), products = getSelected('product');
+  const grade = document.getElementById('sel-grade').value;
+  const score = document.getElementById('sel-score').value;
+  const subject = document.getElementById('sel-subject').value;
+  const audience = document.getElementById('sel-audience').value;
+  const style = document.getElementById('sel-style').value;
+  const deadline = document.getElementById('deadline-time').value;
+  const scarcity = document.getElementById('scarcity-num').value;
+  const typeNames = {t0:'维护话术',t1a:'蓄水激活',t1b:'软截杀',t2:'硬截杀'};
+
+  let p = `请生成一条【${typeNames[selectedType]}】。\n\n`;
+  if (kw) p += `场景描述：${kw}\n\n`;
+  const params = [
+    nodes.length && `用户节点：${nodes.join('、')}`,
+    crisis.length && `危机维度：${crisis.join('、')}`,
+    hooks.length && `钩子/抓手：${hooks.join('、')}`,
+    products.length && `产品节点：${products.join('、')}`,
+    grade && `年级：${grade}`,
+    score && `分数段：${score}`,
+    subject && `学科：${subject}`,
+    audience && `受众：${audience}`,
+    style && `话术风格：${style}`,
+    deadline && `截止时间：${deadline}`,
+    scarcity && `稀缺信息：${scarcity}`,
+  ].filter(Boolean);
+  if (params.length) p += '配置参数：\n' + params.map(x => '- ' + x).join('\n') + '\n\n';
+  if (!kw && !params.length) {
+    const def = {
+      t0:'生成一条日常维护话术，自然关怀，不提产品，像朋友发的消息。',
+      t1a:'生成一条蓄水激活话术，用学员故事+考试节点，末尾开放式问题引出对话。',
+      t1b:'生成一条软截杀话术，假期节点+年级特点+早鸟优惠+29元体验课钩子。',
+      t2:'生成一条硬截杀话术，封班场景，今晚23:59截止，最后3个名额，极简有力。'
+    };
+    p += def[selectedType];
+  }
+  p += '\n\n请直接输出话术内容，不要有任何解释或前言。';
+  return p;
+}
+
+// ── CALL API ──
+async function callAPI(systemPrompt, userPrompt, onChunk) {
+  const pv = PROVIDERS[currentProvider];
+  const key = cleanKey(localStorage.getItem('yd_api_key_' + currentProvider) || '');
+
+  if (pv.isOpenAICompat) {
+    // OpenAI-compatible format
+    const resp = await fetch(pv.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key,
+      },
+      body: JSON.stringify({
+        model: pv.model,
+        max_tokens: 1000,
+        stream: true,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]
+      })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${resp.status}`);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data);
+          const text = parsed.choices?.[0]?.delta?.content || '';
+          if (text) onChunk(text);
+        } catch(e) {}
+      }
+    }
+  } else {
+    // Anthropic format
+    const resp = await fetch(pv.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: pv.model,
+        max_tokens: 1000,
+        stream: true,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${resp.status}`);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.type === 'content_block_delta' && parsed.delta?.text)
+            onChunk(parsed.delta.text);
+        } catch(e) {}
+      }
+    }
+  }
+}
+
+// ── GENERATE ──
+async function generate() {
+  currentProvider = localStorage.getItem('yd_provider') || 'anthropic';
+  apiKey = cleanKey(localStorage.getItem('yd_api_key_' + currentProvider) || '');
+  if (!apiKey) { openModal(); return; }
+
+  const btn = document.getElementById('gen-btn');
+  btn.classList.add('loading');
+  document.getElementById('btn-spinner').style.display = 'block';
+  document.getElementById('btn-text').textContent = '生成中…';
+
+  document.getElementById('out-empty').style.display = 'none';
+  document.getElementById('out-result').classList.add('show');
+  const textEl = document.getElementById('result-text');
+  textEl.textContent = '';
+  textEl.classList.add('streaming');
+
+  const typeNames = {t0:'维护话术',t1a:'蓄水激活',t1b:'软截杀',t2:'硬截杀'};
+  const typeClasses = {t0:'meta-t0',t1a:'meta-t1a',t1b:'meta-t1b',t2:'meta-t2'};
+  const meta = document.getElementById('result-meta');
+  meta.innerHTML = '';
+  const tb = document.createElement('span');
+  tb.className = 'meta-badge ' + typeClasses[selectedType];
+  tb.textContent = typeNames[selectedType];
+  meta.appendChild(tb);
+  // provider tag
+  const pvt = document.createElement('span');
+  pvt.className = 'provider-tag ' + (PROVIDERS[currentProvider].tagClass || '');
+  pvt.textContent = PROVIDERS[currentProvider].name.split(' ')[0];
+  meta.appendChild(pvt);
+  const allDims = [...getSelected('node'),...getSelected('crisis'),...getSelected('hook'),...getSelected('product')];
+  allDims.forEach(d => {
+    const s = document.createElement('span'); s.className='meta-dim'; s.textContent=d; meta.appendChild(s);
+  });
+  const cc = document.createElement('span'); cc.className='meta-count'; cc.id='char-count'; cc.textContent='—';
+  meta.appendChild(cc);
+
+  let fullText = '';
+  try {
+    await callAPI(SYSTEM_PROMPT, buildUserPrompt(), (chunk) => {
+      fullText += chunk;
+      textEl.textContent = fullText;
+      document.getElementById('char-count').textContent = fullText.length + '字';
+    });
+    textEl.classList.remove('streaming');
+    document.getElementById('out-count').textContent = fullText.length + '字';
+    saveHistory(typeNames[selectedType], fullText, allDims);
+  } catch (err) {
+    textEl.classList.remove('streaming');
+    textEl.textContent = '生成失败：' + err.message;
+    showToast('❌ ' + err.message);
+  }
+
+  btn.classList.remove('loading');
+  document.getElementById('btn-spinner').style.display = 'none';
+  document.getElementById('btn-text').textContent = '✦ 生成话术';
+}
+
+// ── COPY ──
+function copyResult() {
+  const text = document.getElementById('result-text').textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.classList.add('copy-ok');
+    btn.innerHTML = '<span>✓</span><span>已复制</span>';
+    setTimeout(() => { btn.classList.remove('copy-ok'); btn.innerHTML='<span>📋</span><span>复制话术</span>'; }, 2000);
+    showToast('✓ 话术已复制到剪贴板');
+  });
+}
+
+// ── HISTORY ──
+function saveHistory(type, text, dims) {
+  history.unshift({ type, text, dims, time: new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) });
+  if (history.length > 10) history.pop();
+  renderHistory();
+}
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  const panel = document.getElementById('history-panel');
+  panel.style.display = history.length ? 'block' : 'none';
+  document.getElementById('hist-count').textContent = history.length + ' 条';
+  const typeMap = {'维护话术':'meta-t0','蓄水激活':'meta-t1a','软截杀':'meta-t1b','硬截杀':'meta-t2'};
+  list.innerHTML = history.map((item,i) => `
+    <div class="hist-item" onclick="loadHistory(${i})">
+      <div class="hist-meta">
+        <span class="meta-badge ${typeMap[item.type]||'meta-t1a'}">${item.type}</span>
+        ${item.dims.slice(0,2).map(d=>`<span class="meta-dim">${d}</span>`).join('')}
+        <span class="hist-time">${item.time}</span>
+      </div>
+      <div class="hist-preview">${item.text.slice(0,55)}…</div>
+    </div>`).join('');
+}
+function loadHistory(i) {
+  const item = history[i];
+  document.getElementById('out-empty').style.display = 'none';
+  document.getElementById('out-result').classList.add('show');
+  document.getElementById('result-text').textContent = item.text;
+  document.getElementById('result-text').classList.remove('streaming');
+  document.getElementById('out-count').textContent = item.text.length + '字';
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+document.addEventListener('keydown', e => { if (e.key==='Enter' && (e.metaKey||e.ctrlKey)) generate(); });
+</script>
+</body>
+</html>
