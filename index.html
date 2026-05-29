@@ -480,6 +480,8 @@ let selectedType = 't1a';
 let currentProvider = localStorage.getItem('yd_provider') || 'anthropic';
 let apiKey = localStorage.getItem('yd_api_key_' + currentProvider) || '';
 let history = [];
+let KB = null;
+let kbPromise = null;
 
 // ── SYSTEM PROMPT ──
 const SYSTEM_PROMPT = `你是一位专注于高中在线教育领域的资深销售话术专家，服务于有道领世等头部在线教育机构。你深度理解高中学生及其家长的核心焦虑，能生成自然、有效、不显推销感的微信群发话术。
@@ -644,36 +646,196 @@ function getSelected(group) {
 }
 
 // ── AUTO DETECT ──
+function uniqueList(items) {
+  return [...new Set(items.filter(Boolean))];
+}
+
+function detectExamName(text) {
+  if (/期末/.test(text)) return '期末考';
+  if (/期中/.test(text)) return '期中考';
+  if (/月考/.test(text)) return '月考';
+  if (/一模/.test(text)) return '一模';
+  if (/二模/.test(text)) return '二模';
+  if (/三模/.test(text)) return '三模';
+  if (/模拟|模考/.test(text)) return '模拟考';
+  if (/联考/.test(text)) return '联考';
+  if (/高考/.test(text)) return '高考';
+  if (/分班考/.test(text)) return '分班考';
+  return '';
+}
+
+function detectHolidayName(text) {
+  if (/暑假|暑期/.test(text)) return '暑假';
+  if (/寒假|寒期/.test(text)) return '寒假';
+  if (/国庆/.test(text)) return '国庆假期';
+  if (/五一|劳动节/.test(text)) return '五一假期';
+  if (/端午/.test(text)) return '端午假期';
+  if (/中秋/.test(text)) return '中秋假期';
+  if (/清明/.test(text)) return '清明假期';
+  if (/元旦/.test(text)) return '元旦假期';
+  if (/周末/.test(text)) return '周末';
+  return '';
+}
+
+function detectScoreReleaseName(text) {
+  const exam = detectExamName(text);
+  if (exam && /出分|成绩|查分|分数/.test(text)) return exam + '出分';
+  if (/高考出分|高考成绩/.test(text)) return '高考出分';
+  if (/联考出分|联考成绩/.test(text)) return '联考出分';
+  return '';
+}
+
+function detectBridgeName(text) {
+  if (/初升高|中考|新高一/.test(text)) return '初升高衔接';
+  if (/高一升高二|新高二/.test(text)) return '高一升高二衔接';
+  if (/高二升高三|新高三|准高三/.test(text)) return '高二升高三衔接';
+  if (/升学衔接/.test(text)) return '';
+  return '';
+}
+
+function detectCourseStartName(text) {
+  if (/体验课/.test(text)) return '体验课开课';
+  if (/正式课/.test(text)) return '正式课开课';
+  if (/直播课/.test(text)) return '直播课开课';
+  if (/训练营|开营/.test(text)) return '训练营开营';
+  if (/开学/.test(text)) return '开学节点';
+  return '';
+}
+
+function parseQuickInput(text) {
+  const raw = text || '';
+  const result = {
+    nodes: [], crisis: [], hooks: [], products: [],
+    type: '', grade: '', subject: '', score: '', audience: '',
+    deadline: '', scarcity: '', examName: '', holidayName: '',
+    scoreReleaseName: '', bridgeName: '', courseStartName: '',
+    unspecifiedNodes: []
+  };
+  if (!raw.trim()) return result;
+
+  result.examName = detectExamName(raw);
+  result.holidayName = detectHolidayName(raw);
+  result.scoreReleaseName = detectScoreReleaseName(raw);
+  result.bridgeName = detectBridgeName(raw);
+  result.courseStartName = detectCourseStartName(raw);
+  if (/考试|考前|要考|快考|月考|期中|期末|高考|模拟|模考|一模|二模|三模|联考|分班考/.test(raw)) {
+    result.nodes.push('考试节点');
+    if (!result.examName) result.unspecifiedNodes.push('考试节点');
+  }
+  if (/放假|暑假|暑期|寒假|寒期|五一|国庆|假期|周末|端午|中秋|清明|元旦/.test(raw)) {
+    result.nodes.push('放假节点');
+    if (!result.holidayName) result.unspecifiedNodes.push('放假节点');
+  }
+  if (/出分|快出分|成绩公布|查分|快查分|分数出来|成绩出来|成绩快出来|成绩要出来/.test(raw)) {
+    result.nodes.push('出分季');
+    if (!result.scoreReleaseName) result.unspecifiedNodes.push('出分季');
+  }
+  if (/中考|初升高|新高一|高一升高二|高二升高三|新高二|新高三|准高三|升学|衔接/.test(raw)) {
+    result.nodes.push('升学衔接');
+    if (!result.bridgeName) result.unspecifiedNodes.push('升学衔接');
+  }
+  if (/开课|开学|开营|体验课|正式课|直播课|训练营/.test(raw)) {
+    result.nodes.push('开课节点');
+    if (!result.courseStartName) result.unspecifiedNodes.push('开课节点');
+  }
+
+  if (/政策|命题|选科|录取|强基|综评|综合评价|赋分|志愿/.test(raw)) result.crisis.push('升学政策');
+  if (/年级|高一|高二|高三|阶段|分水岭|一轮|二轮|初高衔接/.test(raw)) result.crisis.push('年级特点');
+  if (/分数|分段|知识|学科|数学|物理|化学|英语|语文|生物|薄弱|偏科|压轴|导数|圆锥|阅读|作文/.test(raw)) result.crisis.push('学科学情');
+  if (/学员|同学|案例|提了|提升|提分|喜报|进步/.test(raw)) result.crisis.push('学员故事');
+  if (/竞品|别家|对比|同学在学|已报|被抢|被甩|别人/.test(raw)) result.crisis.push('竞争对比');
+  if (/孩子|叛逆|不学|厌学|主动|亲子|沟通|不配合|管不了/.test(raw)) result.crisis.push('亲子关系');
+
+  if (/资料|真题|笔记|思维导图|视频|解题|素材|领取/.test(raw)) result.hooks.push('电子学习资料');
+  if (/计划|规划|学习安排|时间表/.test(raw)) result.hooks.push('学习计划');
+  if (/试卷分析|卷子分析|试卷诊断|错题分析|试卷/.test(raw)) result.hooks.push('试卷分析服务');
+  if (/体验课|试听|29元/.test(raw)) result.hooks.push('29元体验课');
+  if (/品牌书|白皮书|品牌/.test(raw)) result.hooks.push('师资品牌背书');
+  if (/退费|退款|无忧|全退/.test(raw)) result.hooks.push('退费保障');
+
+  if (/封班|名额|涨价|截止|早鸟|倒计时|决策|门槛|赠礼|赠课/.test(raw)) result.products.push('封班/名额有限');
+  if (/涨价/.test(raw)) result.products.push('涨价截止');
+  if (/开售|早鸟/.test(raw)) result.products.push('开售/早鸟');
+  if (/今晚|今天|23:|23点|24点|48小时|截止/.test(raw)) result.deadline = raw.match(/今晚\d{1,2}[:：点]\d{0,2}|今天\d{1,2}[:：点]\d{0,2}|\d{1,2}[:：]\d{2}|今晚|今天|48小时/)?.[0] || '';
+  if (/最后\d+个|剩\d+个|仅剩\d+个|最后\d+名|剩\d+名|仅剩\d+名/.test(raw)) result.scarcity = raw.match(/(?:最后|剩|仅剩)\d+(?:个|名)/)?.[0] || '';
+
+  if (/新高一|初升高/.test(raw)) result.grade = '新高一';
+  else if (/高一上/.test(raw)) result.grade = '高一上';
+  else if (/高一下/.test(raw)) result.grade = '高一下';
+  else if (/高二上/.test(raw)) result.grade = '高二上';
+  else if (/高二下/.test(raw)) result.grade = '高二下';
+  else if (/高三上|一轮/.test(raw)) result.grade = '高三上';
+  else if (/高三下|二轮|三轮|冲刺/.test(raw)) result.grade = '高三下';
+
+  ['数学','物理','化学','英语','语文','生物','全科'].some(s => {
+    if (raw.includes(s)) { result.subject = s; return true; }
+    return false;
+  });
+  if (/450以下|450分以下|低于450/.test(raw)) result.score = '450以下';
+  else if (/450[-~—到至]550|450\s*-\s*550/.test(raw)) result.score = '450-550';
+  else if (/550[-~—到至]620|550\s*-\s*620/.test(raw)) result.score = '550-620';
+  else if (/620\+|620以上|高于620/.test(raw)) result.score = '620+';
+
+  if (/学生端|发给学生|给学生/.test(raw)) result.audience = '学生端';
+  if (/家长端|发给家长|给家长|家长/.test(raw)) result.audience = '家长端';
+
+  if (/封班|涨价|截止|优惠|早鸟|赠课/.test(raw)) result.type = /今晚|今天|23:|24点|23点|48小时/.test(raw) ? 't2' : 't1b';
+  if (/^激活|激活话术/.test(raw.trim())) result.type = 't1a';
+  if (/^维护|^问候|维护话术/.test(raw.trim())) result.type = 't0';
+
+  result.nodes = uniqueList(result.nodes);
+  result.crisis = uniqueList(result.crisis);
+  result.hooks = uniqueList(result.hooks);
+  result.products = uniqueList(result.products);
+  result.unspecifiedNodes = uniqueList(result.unspecifiedNodes);
+  return result;
+}
+
+function setChipSelected(group, value) {
+  [...document.querySelectorAll(`.chip[data-group="${group}"]`)].forEach(chip => {
+    if (chip.textContent === value) chip.classList.add('sel-' + group);
+  });
+}
+
+function clearChipGroup(group) {
+  document.querySelectorAll('.chip.sel-' + group).forEach(chip => chip.classList.remove('sel-' + group));
+}
+
+function applyQuickInputToUI(detected) {
+  if (detected.nodes.length) clearChipGroup('node');
+  if (detected.crisis.length) clearChipGroup('crisis');
+  if (detected.hooks.length) clearChipGroup('hook');
+  if (detected.products.length) clearChipGroup('product');
+  detected.nodes.forEach(v => setChipSelected('node', v));
+  detected.crisis.slice(0, 3).forEach(v => setChipSelected('crisis', v));
+  detected.hooks.forEach(v => setChipSelected('hook', v));
+  detected.products.forEach(v => setChipSelected('product', v));
+  if (detected.type) switchTypeTo(detected.type);
+  if (detected.grade) document.getElementById('sel-grade').value = detected.grade;
+  if (detected.subject) document.getElementById('sel-subject').value = detected.subject;
+  if (detected.score) document.getElementById('sel-score').value = detected.score;
+  if (detected.audience) document.getElementById('sel-audience').value = detected.audience;
+  if (detected.deadline) document.getElementById('deadline-time').value = detected.deadline;
+  if (detected.scarcity) document.getElementById('scarcity-num').value = detected.scarcity;
+}
+
 function autoDetect() {
   const text = document.getElementById('kw-input').value;
   if (!text.trim()) { document.getElementById('id-wrap').classList.remove('show'); return; }
-  const detected = [];
-  const rules = [
-    [/考试|月考|期中|期末|高考|模拟/, '考试节点'],
-    [/放假|暑假|寒假|五一|国庆|假期|周末/, '放假节点'],
-    [/出分|成绩公布/, '出分季'],
-    [/中考|初升高|新高一|升学|衔接/, '升学衔接'],
-    [/开课|开学/, '开课节点'],
-    [/政策|命题|选科|录取|强基/, '升学政策'],
-    [/年级|高一|高二|高三|阶段|分水岭/, '年级特点'],
-    [/分数|分段|知识|学科|数学|物理|化学|英语|语文/, '学科学情'],
-    [/学员|同学|案例|提了|提升|提分|喜报/, '学员故事'],
-    [/同学在学|已报|被抢|被甩/, '竞争对比'],
-    [/孩子|叛逆|不学|厌学|主动/, '亲子关系'],
-    [/资料|真题|笔记|思维导图|视频|解题|素材/, '电子学习资料'],
-    [/体验课|试听|29元/, '29元体验课'],
-    [/退费|退款|无忧|全退/, '退费保障'],
-  ];
-  rules.forEach(([re, name]) => { if (re.test(text)) detected.push(name); });
-
-  // auto switch type
-  if (/封班|涨价|截止|优惠|早鸟|赠课/.test(text)) {
-    if (/今晚|今天|23:|24点|23点|48小时/.test(text)) switchTypeTo('t2');
-    else switchTypeTo('t1b');
-    detected.push('产品节点');
-  }
-  if (/^激活/.test(text.trim())) switchTypeTo('t1a');
-  if (/^维护|^问候/.test(text.trim())) switchTypeTo('t0');
+  const parsed = parseQuickInput(text);
+  applyQuickInputToUI(parsed);
+  const detected = uniqueList([
+    ...parsed.nodes, ...parsed.crisis, ...parsed.hooks, ...parsed.products,
+    parsed.grade && `年级：${parsed.grade}`,
+    parsed.subject && `学科：${parsed.subject}`,
+    parsed.score && `分数段：${parsed.score}`,
+    parsed.examName && `考试类型：${parsed.examName}`,
+    parsed.holidayName && `假期类型：${parsed.holidayName}`,
+    parsed.scoreReleaseName && `出分节点：${parsed.scoreReleaseName}`,
+    parsed.bridgeName && `衔接阶段：${parsed.bridgeName}`,
+    parsed.courseStartName && `开课类型：${parsed.courseStartName}`,
+    ...parsed.unspecifiedNodes.map(n => `${n}：未指定具体名称`)
+  ]);
 
   if (detected.length) {
     document.getElementById('id-wrap').classList.add('show');
@@ -689,27 +851,360 @@ function switchTypeTo(type) {
   updateTypeUI();
 }
 
+// ── KNOWLEDGE BASE ──
+async function fetchText(path, fallback = '') {
+  try {
+    const resp = await fetch(path);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.text();
+  } catch (err) {
+    console.warn('KB text load failed:', path, err);
+    return fallback;
+  }
+}
+
+async function fetchJSON(path, fallback = null) {
+  try {
+    const resp = await fetch(path);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.json();
+  } catch (err) {
+    console.warn('KB json load failed:', path, err);
+    return fallback;
+  }
+}
+
+async function initKB() {
+  if (KB) return KB;
+  if (kbPromise) return kbPromise;
+  kbPromise = (async () => {
+    const [
+      base, crisisDetail, hooksDetail, gradeInsights, subjectDiag, examples,
+      productValue, parentPsychology, educationPolicy, studyHabits, crisisExtended,
+      productCards, gradeCards, parentCards, policyCards, habitCards, subjectCards
+    ] = await Promise.all([
+      fetchText('./data/prompt/system_base.md', SYSTEM_PROMPT),
+      fetchJSON('./data/dimensions/crisis.json', {}),
+      fetchJSON('./data/dimensions/hooks.json', {}),
+      fetchJSON('./data/knowledge/grade_insights.json', {}),
+      fetchJSON('./data/knowledge/subject_diagnosis.json', {}),
+      fetchJSON('./data/examples/batch_01_annotated.json', []),
+      fetchJSON('./data/knowledge/product_value.json', {}),
+      fetchJSON('./data/knowledge/parent_psychology.json', {}),
+      fetchJSON('./data/knowledge/education_policy.json', {}),
+      fetchJSON('./data/knowledge/study_habits.json', {}),
+      fetchJSON('./data/dimensions/crisis_extended.json', {}),
+      fetchJSON('./data/references/product_value/cards.json', []),
+      fetchJSON('./data/references/grade_insights/cards.json', []),
+      fetchJSON('./data/references/parent_psychology/cards.json', []),
+      fetchJSON('./data/references/education_policy/cards.json', []),
+      fetchJSON('./data/references/study_habits/cards.json', []),
+      fetchJSON('./data/references/subject_diagnosis/cards.json', [])
+    ]);
+    KB = {
+      base, crisisDetail, hooksDetail, gradeInsights, subjectDiag, examples,
+      productValue, parentPsychology, educationPolicy, studyHabits, crisisExtended,
+      references: {
+        product_value: Array.isArray(productCards) ? productCards : [],
+        grade_insights: Array.isArray(gradeCards) ? gradeCards : [],
+        parent_psychology: Array.isArray(parentCards) ? parentCards : [],
+        education_policy: Array.isArray(policyCards) ? policyCards : [],
+        study_habits: Array.isArray(habitCards) ? habitCards : [],
+        subject_diagnosis: Array.isArray(subjectCards) ? subjectCards : []
+      }
+    };
+    return KB;
+  })();
+  return kbPromise;
+}
+
+function buildPromptContext() {
+  const kw = document.getElementById('kw-input').value.trim();
+  const quick = parseQuickInput(kw);
+  return {
+    type: quick.type || selectedType,
+    typeName: ({t0:'维护话术',t1a:'蓄水激活',t1b:'软截杀',t2:'硬截杀'})[quick.type || selectedType],
+    nodes: quick.nodes.length ? quick.nodes : getSelected('node'),
+    crisis: (quick.crisis.length ? quick.crisis : getSelected('crisis')).slice(0, 3),
+    hooks: quick.hooks.length ? quick.hooks : getSelected('hook'),
+    products: quick.products.length ? quick.products : getSelected('product'),
+    grade: quick.grade || document.getElementById('sel-grade').value,
+    score: quick.score || document.getElementById('sel-score').value,
+    subject: quick.subject || document.getElementById('sel-subject').value,
+    audience: quick.audience || document.getElementById('sel-audience').value,
+    style: document.getElementById('sel-style').value,
+    deadline: quick.deadline || document.getElementById('deadline-time').value,
+    scarcity: quick.scarcity || document.getElementById('scarcity-num').value,
+    keywordText: kw,
+    quick,
+    examName: quick.examName,
+    holidayName: quick.holidayName,
+    scoreReleaseName: quick.scoreReleaseName,
+    bridgeName: quick.bridgeName,
+    courseStartName: quick.courseStartName,
+    unspecifiedNodes: quick.unspecifiedNodes,
+    hasUnspecifiedExam: quick.unspecifiedNodes.includes('考试节点')
+  };
+}
+
+function normalizeGrade(grade) {
+  if (!grade) return [];
+  const out = [grade];
+  if (grade.includes('高一') || grade === '新高一') out.push('高一');
+  if (grade.includes('高二')) out.push('高二');
+  if (grade.includes('高三')) out.push('高三');
+  return [...new Set(out)];
+}
+
+function arrayHit(values, targets) {
+  if (!Array.isArray(values) || !values.length) return 0;
+  if (!Array.isArray(targets) || !targets.length) return 1;
+  return values.some(v => targets.includes(v)) ? 1 : 0;
+}
+
+function textHit(text, terms) {
+  if (!text || !terms?.length) return 0;
+  return terms.some(t => t && text.includes(t)) ? 1 : 0;
+}
+
+function gradeGroup(value) {
+  if (!value) return '';
+  if (value.includes('新高一') || value.includes('高一')) return '高一';
+  if (value.includes('高二')) return '高二';
+  if (value.includes('高三')) return '高三';
+  return value;
+}
+
+function isBroadField(targets, field) {
+  if (!Array.isArray(targets) || !targets.length) return true;
+  if (targets.some(v => ['通用', '不限', '全科', '高中', '高中阶段'].includes(v))) return true;
+  if (field === 'grade') {
+    return new Set(targets.map(gradeGroup).filter(Boolean)).size >= 3;
+  }
+  if (field === 'subject') {
+    return targets.length >= 5;
+  }
+  if (field === 'score') {
+    return targets.length >= 3;
+  }
+  return false;
+}
+
+function allowCardForBlankFields(card, ctx) {
+  const applies = card.applies_to || {};
+  if (!ctx.grade && !isBroadField(applies.grade, 'grade')) return false;
+  if (!ctx.subject && !isBroadField(applies.subject, 'subject')) return false;
+  if (!ctx.score && !isBroadField(applies.score, 'score')) return false;
+  return true;
+}
+
+function getUniversalMode(ctx) {
+  return !ctx.grade && !ctx.subject && !ctx.score;
+}
+
+function scoreCard(card, ctx, domain) {
+  const applies = card.applies_to || {};
+  const cardText = [
+    card.category, card.subtopic, card.when_to_use, card.sales_insight,
+    ...(card.tags || []), ...(card.talk_tracks || [])
+  ].join(' ');
+  let score = 0;
+
+  const gradeTargets = normalizeGrade(ctx.grade);
+  if (ctx.grade && arrayHit(gradeTargets, applies.grade)) score += 5;
+  if (ctx.subject && arrayHit([ctx.subject], applies.subject)) score += 5;
+  if (ctx.score && arrayHit([ctx.score], applies.score)) score += 4;
+  if (ctx.audience && arrayHit([ctx.audience], applies.audience)) score += 2;
+  if (ctx.typeName && arrayHit([ctx.typeName], applies.type)) score += 2;
+
+  const dims = [...ctx.nodes, ...ctx.crisis, ...ctx.hooks, ...ctx.products];
+  (card.tags || []).forEach(tag => {
+    if (dims.includes(tag)) score += 3;
+    if (ctx.keywordText.includes(tag)) score += 2;
+  });
+
+  if (domain === 'grade_insights' && ctx.grade) score += 2;
+  if (domain === 'subject_diagnosis' && ctx.crisis.includes('学科学情')) score += 5;
+  if (domain === 'education_policy' && (ctx.crisis.includes('升学政策') || textHit(ctx.keywordText, ['选科','赋分','志愿','强基','综评','综合评价','一分一段','春考','浙江','上海']))) score += 5;
+  if (domain === 'parent_psychology' && (ctx.crisis.includes('亲子关系') || textHit(ctx.keywordText, ['孩子不愿','不配合','家长','叛逆','沟通','管不了','不想学']))) score += 5;
+  if (domain === 'study_habits' && textHit(ctx.keywordText, ['习惯','自律','手机','错题','刷题','听懂','不会做','没时间','作业'])) score += 5;
+  if (domain === 'product_value' && (ctx.hooks.length || ctx.products.length || ['t1b','t2'].includes(ctx.type) || textHit(ctx.keywordText, ['课程','产品','老师','服务','资源','有道','领世','体验课','报名']))) score += 5;
+
+  if (textHit(cardText, [ctx.grade, ctx.subject, ctx.score, ...dims])) score += 2;
+  return score;
+}
+
+function rotateCards(cards, ctx, count) {
+  const seed = [
+    ctx.type, ctx.grade, ctx.subject, ctx.score, ctx.audience,
+    ctx.keywordText.length, new Date().getMinutes()
+  ].join('|');
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  const grouped = cards.reduce((acc, item) => {
+    (acc[item.score] ||= []).push(item);
+    return acc;
+  }, {});
+  return Object.keys(grouped)
+    .sort((a,b) => Number(b) - Number(a))
+    .flatMap(score => {
+      const bucket = grouped[score];
+      const offset = bucket.length ? hash % bucket.length : 0;
+      return bucket.slice(offset).concat(bucket.slice(0, offset));
+    })
+    .slice(0, count)
+    .map(x => x.card);
+}
+
+function retrieveCards(ctx) {
+  const universalMode = getUniversalMode(ctx);
+  const domainLimits = {
+    grade_insights: ctx.grade ? 2 : 0,
+    subject_diagnosis: ctx.subject ? 3 : 0,
+    education_policy: ctx.crisis.includes('升学政策') || textHit(ctx.keywordText, ['选科','赋分','志愿','强基','综评','浙江','上海']) ? 2 : 1,
+    parent_psychology: ctx.audience === '家长端' || ctx.crisis.includes('亲子关系') ? 2 : 1,
+    study_habits: 2,
+    product_value: ctx.hooks.length || ctx.products.length || ['t1b','t2'].includes(ctx.type) ? 3 : 1
+  };
+  const selected = [];
+  Object.entries(KB.references).forEach(([domain, cards]) => {
+    const limit = domainLimits[domain] || 0;
+    if (!limit) return;
+    const scored = cards
+      .filter(card => allowCardForBlankFields(card, ctx))
+      .map(card => ({ card, score: scoreCard(card, ctx, domain) }))
+      .filter(x => x.score > 0)
+      .sort((a,b) => b.score - a.score);
+    selected.push(...rotateCards(scored, ctx, limit));
+  });
+  const seen = new Set();
+  return selected.filter(card => {
+    if (seen.has(card.id)) return false;
+    seen.add(card.id);
+    return true;
+  }).slice(0, universalMode ? 10 : 12);
+}
+
+function formatCard(card, i) {
+  const talks = (card.talk_tracks || []).slice(0, 2).map(t => `- 销售可说：${t}`).join('\n');
+  const evidence = (card.evidence || []).slice(0, 2).map(e => `- 依据：${e}`).join('\n');
+  return `### 知识卡${i}：${card.category || card.domain}｜${card.subtopic || card.id}
+适用：${card.when_to_use || '按当前场景酌情使用'}
+洞察：${card.sales_insight || ''}
+可用素材：${card.prompt_snippet || ''}
+${talks}
+${evidence}
+禁忌：${card.avoid || '无'}`;
+}
+
+function selectExamples(ctx) {
+  const examples = Array.isArray(KB.examples) ? KB.examples : [];
+  const scored = examples.map(ex => {
+    let score = 0;
+    if (ex.type === ctx.typeName) score += 5;
+    const dims = [...ctx.nodes, ...ctx.crisis, ...ctx.hooks, ...ctx.products];
+    (ex.dims || []).forEach(d => { if (dims.includes(d)) score += 3; });
+    if (ctx.grade && ex.grade === ctx.grade) score += 2;
+    if (ctx.subject && (ex.text || '').includes(ctx.subject)) score += 1;
+    if (ex.quality === 'A') score += 1;
+    return { ex, score };
+  }).filter(x => x.score > 0).sort((a,b) => b.score - a.score);
+  return rotateCards(scored.map(x => ({card:x.ex, score:x.score})), ctx, 2);
+}
+
+function buildSystemPrompt(ctx) {
+  const parts = [KB.base || SYSTEM_PROMPT];
+  const universalMode = getUniversalMode(ctx);
+
+  parts.push(`## 本次任务
+话术类型：${ctx.typeName}
+年级：${ctx.grade || '通用'}
+学科：${ctx.subject || '不限'}
+分数段：${ctx.score || '通用'}
+受众：${ctx.audience || '家长端'}
+危机维度：${ctx.crisis.join('、') || '无'}
+钩子/产品节点：${[...ctx.hooks, ...ctx.products].join('、') || '无'}
+${ctx.examName ? `考试类型：${ctx.examName}` : (ctx.hasUnspecifiedExam ? '考试类型：未指定具体考试名称' : '')}
+${ctx.holidayName ? `假期类型：${ctx.holidayName}` : (ctx.unspecifiedNodes.includes('放假节点') ? '假期类型：未指定具体假期名称' : '')}
+${ctx.scoreReleaseName ? `出分节点：${ctx.scoreReleaseName}` : (ctx.unspecifiedNodes.includes('出分季') ? '出分节点：未指定具体哪次考试出分' : '')}
+${ctx.bridgeName ? `衔接阶段：${ctx.bridgeName}` : (ctx.unspecifiedNodes.includes('升学衔接') ? '衔接阶段：未指定具体升学衔接阶段' : '')}
+${ctx.courseStartName ? `开课类型：${ctx.courseStartName}` : (ctx.unspecifiedNodes.includes('开课节点') ? '开课类型：未指定具体课程/开营名称' : '')}
+
+要求：以细颗粒知识卡为主召回依据。不要机械堆砌所有信息，要自然融合成一条微信话术。
+${universalMode ? '当前为通用模式：用户未选择年级、学科、分数段，只能输出适用于高中家长/学生的通用话术。' : '当前为精准模式：只在用户已选择的字段上做具体化表达。'}`);
+
+  const cards = retrieveCards(ctx);
+  if (cards.length) {
+    parts.push('## 细颗粒知识卡（用于精准生成，勿照抄标题）\n' + cards.map(formatCard).join('\n\n'));
+  }
+
+  const legacy = [];
+  if (ctx.grade && KB.gradeInsights?.[ctx.grade]) {
+    const g = KB.gradeInsights[ctx.grade];
+    legacy.push(`## 低权重背景概述：年级（${ctx.grade}）
+以下内容只作方向参考，不得覆盖上方细颗粒知识卡。
+核心焦虑：${g.核心焦虑 || ''}
+家长痛点：${g.家长痛点 || ''}
+学生痛点：${g.学生痛点 || ''}
+话术切入：${g.话术切入点 || ''}
+数据支撑：${g.数据支撑 || ''}`);
+  }
+  if (ctx.crisis.includes('学科学情') && ctx.subject && ctx.score && KB.subjectDiag?.[ctx.subject]?.[ctx.score]) {
+    legacy.push(`## 低权重背景概述：学科学情（${ctx.subject} · ${ctx.score}）
+以下内容只作方向参考，不得覆盖上方细颗粒知识卡。
+${KB.subjectDiag[ctx.subject][ctx.score]}`);
+  }
+  if (legacy.length) parts.push(legacy.join('\n\n'));
+
+  const examples = selectExamples(ctx);
+  if (examples.length) {
+    parts.push('## 优秀参考案例（只参考结构和语感，禁止直接照抄）\n' + examples.map((ex,i) =>
+      `案例${i+1}（${ex.type}·${(ex.dims || []).join('+')}）：\n${ex.text}`
+    ).join('\n\n'));
+  }
+
+  parts.push(`## 最终生成约束
+- 只输出一条完整微信话术正文。
+- 只有当用户明确选择年级、学科、分数段时，才可以具体到对应字段。
+- 如果年级为空，禁止自行编造“高一/高二/高三/新高一”等具体年级，只能说“高中阶段”“孩子现在这个阶段”等通用表达。
+- 如果学科为空，禁止自行编造“数学/英语/物理”等具体学科，只能说“学习”“考试”“薄弱模块”“错题”等通用表达。
+- 如果分数段为空，禁止自行编造具体分数段或成绩层级。
+- 如果用户只表达“考试/考前/快考试了”但没有明确写出期中、期末、月考、模拟考、联考、高考等考试名称，禁止自行编造具体考试名，只能说“快要考试了”“最近这次考试”“考前这段时间”。
+- 如果用户只表达“放假/假期快到了”但没有明确写出暑假、寒假、国庆、五一等具体假期，禁止自行编造具体假期名，只能说“假期快到了”“接下来这段假期”“假期前后”。
+- 如果用户只表达“出分/成绩快出来了”但没有明确写出哪次考试出分，禁止自行编造期中、期末、月考、模考等具体考试名，只能说“近期的考试差不多要出分了”“这次成绩出来后”。
+- 如果用户只表达“升学衔接/衔接关键期”但没有明确写出初升高、高一升高二、高二升高三等阶段，禁止自行编造具体衔接阶段，只能说“即将步入升学衔接的关键时期”“这个衔接阶段”。
+- 如果用户只表达“开课/要开课了”但没有明确写出体验课、正式课、直播课、训练营等具体课程形态，禁止自行编造具体课型，只能说“近期要开课了”“开课前这段时间”。
+- 如果涉及产品价值，优先自然承接到有道领世的智能诊断、视频出版物、学法直播、AI推题、错题补推、规划师服务、试卷分析等具体能力。
+- 不要承诺保证提分，不要编造不存在的数据；没有依据的数据不要写。
+- 话术要像销售真实发给家长/学生的微信，不要像报告。`);
+
+  return parts.join('\n\n');
+}
+
 // ── BUILD PROMPT ──
 function buildUserPrompt() {
   const kw = document.getElementById('kw-input').value.trim();
-  const nodes = getSelected('node'), crisis = getSelected('crisis');
-  const hooks = getSelected('hook'), products = getSelected('product');
-  const grade = document.getElementById('sel-grade').value;
-  const score = document.getElementById('sel-score').value;
-  const subject = document.getElementById('sel-subject').value;
-  const audience = document.getElementById('sel-audience').value;
-  const style = document.getElementById('sel-style').value;
-  const deadline = document.getElementById('deadline-time').value;
-  const scarcity = document.getElementById('scarcity-num').value;
+  const ctx = buildPromptContext();
+  const { nodes, crisis, hooks, products, grade, score, subject, audience, style, deadline, scarcity } = ctx;
   const typeNames = {t0:'维护话术',t1a:'蓄水激活',t1b:'软截杀',t2:'硬截杀'};
 
-  let p = `请生成一条【${typeNames[selectedType]}】。\n\n`;
-  if (kw) p += `场景描述：${kw}\n\n`;
+  let p = `请生成一条【${typeNames[ctx.type]}】。\n\n`;
+  if (kw) p += `场景描述（最高优先级）：${kw}\n\n`;
   const params = [
     nodes.length && `用户节点：${nodes.join('、')}`,
     crisis.length && `危机维度：${crisis.join('、')}`,
     hooks.length && `钩子/抓手：${hooks.join('、')}`,
     products.length && `产品节点：${products.join('、')}`,
+    ctx.examName && `考试类型：${ctx.examName}`,
+    ctx.hasUnspecifiedExam && `考试类型：未指定，禁止写成期中/期末/月考/模拟考等具体考试`,
+    ctx.holidayName && `假期类型：${ctx.holidayName}`,
+    ctx.unspecifiedNodes.includes('放假节点') && `假期类型：未指定，禁止写成暑假/寒假/国庆/五一等具体假期`,
+    ctx.scoreReleaseName && `出分节点：${ctx.scoreReleaseName}`,
+    ctx.unspecifiedNodes.includes('出分季') && `出分节点：未指定，禁止写成某次具体考试出分`,
+    ctx.bridgeName && `衔接阶段：${ctx.bridgeName}`,
+    ctx.unspecifiedNodes.includes('升学衔接') && `衔接阶段：未指定，禁止写成初升高/高二升高三等具体阶段`,
+    ctx.courseStartName && `开课类型：${ctx.courseStartName}`,
+    ctx.unspecifiedNodes.includes('开课节点') && `开课类型：未指定，禁止写成体验课/正式课/训练营等具体课型`,
     grade && `年级：${grade}`,
     score && `分数段：${score}`,
     subject && `学科：${subject}`,
@@ -726,7 +1221,7 @@ function buildUserPrompt() {
       t1b:'生成一条软截杀话术，假期节点+年级特点+早鸟优惠+29元体验课钩子。',
       t2:'生成一条硬截杀话术，封班场景，今晚23:59截止，最后3个名额，极简有力。'
     };
-    p += def[selectedType];
+    p += def[ctx.type];
   }
   p += '\n\n请直接输出话术内容，不要有任何解释或前言。';
   return p;
@@ -856,7 +1351,10 @@ async function generate() {
 
   let fullText = '';
   try {
-    await callAPI(SYSTEM_PROMPT, buildUserPrompt(), (chunk) => {
+    await initKB();
+    const promptCtx = buildPromptContext();
+    const dynamicSystemPrompt = buildSystemPrompt(promptCtx);
+    await callAPI(dynamicSystemPrompt, buildUserPrompt(), (chunk) => {
       fullText += chunk;
       textEl.textContent = fullText;
       document.getElementById('char-count').textContent = fullText.length + '字';
