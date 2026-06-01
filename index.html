@@ -320,7 +320,7 @@ body{font-family:'Noto Serif SC','PingFang SC',serif;background:var(--paper);col
           <div class="chip" data-group="hook" onclick="toggleChip(this)">电子学习资料</div>
           <div class="chip" data-group="hook" onclick="toggleChip(this)">学习计划</div>
           <div class="chip" data-group="hook" onclick="toggleChip(this)">试卷分析服务</div>
-          <div class="chip" data-group="hook" onclick="toggleChip(this)">29元体验课</div>
+          <div class="chip" data-group="hook" onclick="toggleChip(this)">19元体验课</div>
           <div class="chip" data-group="hook" onclick="toggleChip(this)">师资品牌背书</div>
           <div class="chip" data-group="hook" onclick="toggleChip(this)">退费保障</div>
         </div>
@@ -501,10 +501,10 @@ const SYSTEM_PROMPT = `你是一位专注于高中在线教育领域的资深销
 **升学政策**：高考命题趋势/选科赋分/录取位次
 
 ## 钩子类型
-电子资料（真题/笔记/视频）、学习计划、试卷分析、29元体验课（原价299）、师资背书（一本率95.28%/700+学员25人）、退费保障（15天全退）
+电子资料（真题/笔记/视频）、学习计划、试卷分析、19元体验课（原价299）、师资背书（一本率95.28%/700+学员25人）、退费保障（15天全退）
 
 ## 产品节点
-稀缺感：封班（最后X个名额）；时间压力：涨价（今晚X点）/赠课截止；开售：早鸟期/预报名；降门槛：15天全退/29元入口
+稀缺感：封班（最后X个名额）；时间压力：涨价（今晚X点）/赠课截止；开售：早鸟期/预报名；降门槛：15天全退/19元入口
 
 ## 微信表情使用规范（核心技巧，必须执行）
 
@@ -749,7 +749,7 @@ function parseQuickInput(text) {
   if (/资料|真题|笔记|思维导图|视频|解题|素材|领取/.test(raw)) result.hooks.push('电子学习资料');
   if (/计划|规划|学习安排|时间表/.test(raw)) result.hooks.push('学习计划');
   if (/试卷分析|卷子分析|试卷诊断|错题分析|试卷/.test(raw)) result.hooks.push('试卷分析服务');
-  if (/体验课|试听|29元/.test(raw)) result.hooks.push('29元体验课');
+  if (/体验课|试听|19元/.test(raw)) result.hooks.push('19元体验课');
   if (/品牌书|白皮书|品牌/.test(raw)) result.hooks.push('师资品牌背书');
   if (/退费|退款|无忧|全退/.test(raw)) result.hooks.push('退费保障');
 
@@ -1218,7 +1218,7 @@ function buildUserPrompt() {
     const def = {
       t0:'生成一条日常维护话术，自然关怀，不提产品，像朋友发的消息。',
       t1a:'生成一条蓄水激活话术，用学员故事+考试节点，末尾开放式问题引出对话。',
-      t1b:'生成一条软截杀话术，假期节点+年级特点+早鸟优惠+29元体验课钩子。',
+      t1b:'生成一条软截杀话术，假期节点+年级特点+早鸟优惠+19元体验课钩子。',
       t2:'生成一条硬截杀话术，封班场景，今晚23:59截止，最后3个名额，极简有力。'
     };
     p += def[ctx.type];
