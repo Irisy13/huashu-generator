@@ -239,6 +239,12 @@ body{font-family:'Noto Serif SC','PingFang SC',serif;background:var(--paper);col
       <div class="modal-note" id="key-note">在 <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue)">console.anthropic.com</a> 获取 Key</div>
     </div>
 
+    <div class="modal-field" id="model-field" style="display:none;">
+      <label id="model-label">模型 ID</label>
+      <input type="text" id="model-id-input" placeholder="doubao-seed-2-0-lite-260215" autocomplete="off">
+      <div class="modal-note" id="model-note">填写火山方舟控制台已开通的模型 ID，不同账号需以实际开通为准。</div>
+    </div>
+
     <div class="modal-row">
       <button class="modal-btn ghost" onclick="skipKey()">暂时跳过</button>
       <button class="modal-btn" onclick="saveKey()">保存并开始使用</button>
@@ -466,14 +472,15 @@ const PROVIDERS = {
   },
   doubao: {
     name:'豆包 (火山方舟)', icon:'🌱',
-    endpoint:'/api/ai-proxy',
-    model:'doubao-seed-1-6-251015',
+    endpoint:'/.netlify/functions/ai-proxy',
+    model:'doubao-seed-2-0-lite-260215',
     keyPlaceholder:'火山方舟 API Key',
-    keyHint:'在 console.volcengine.com/ark 获取；因 CORS 限制通过本站函数转发',
+    keyHint:'在 console.volcengine.com/ark 获取；因 CORS 限制通过本站函数转发；模型 ID 以控制台已开通为准',
     keyHintUrl:'https://console.volcengine.com/ark',
     tagClass:'pv-doubao',
     isOpenAICompat: true,
-    viaProxy: true
+    viaProxy: true,
+    allowModelOverride: true
   }
 };
 
@@ -482,6 +489,10 @@ let selectedType = 't1a';
 function normalizeProvider(pv) {
   if (pv === 'zhipu') return 'doubao';
   return PROVIDERS[pv] ? pv : 'anthropic';
+}
+function getProviderModel(pv) {
+  const provider = PROVIDERS[pv];
+  return (localStorage.getItem('yd_model_' + pv) || provider?.model || '').trim();
 }
 let currentProvider = normalizeProvider(localStorage.getItem('yd_provider') || 'anthropic');
 let apiKey = localStorage.getItem('yd_api_key_' + currentProvider) || '';
@@ -573,6 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function openModal() {
   document.getElementById('modal').classList.remove('hidden');
   document.getElementById('api-key-input').value = localStorage.getItem('yd_api_key_'+currentProvider) || '';
+  document.getElementById('model-id-input').value = getProviderModel(currentProvider);
 }
 function skipKey() { document.getElementById('modal').classList.add('hidden'); }
 
@@ -583,6 +595,7 @@ function selectProvider(pv, el) {
   updateKeyFields();
   // load saved key for this provider
   document.getElementById('api-key-input').value = localStorage.getItem('yd_api_key_'+pv) || '';
+  document.getElementById('model-id-input').value = getProviderModel(pv);
 }
 
 function updateKeyFields() {
@@ -591,6 +604,8 @@ function updateKeyFields() {
   document.getElementById('api-key-input').placeholder = pv.keyPlaceholder;
   document.getElementById('key-note').innerHTML =
     `在 <a href="${pv.keyHintUrl}" target="_blank" style="color:var(--blue)">${pv.keyHintUrl.replace('https://','')}</a> 获取 · ${pv.keyHint.split('，').slice(-1)[0] || pv.keyHint}`;
+  document.getElementById('model-field').style.display = pv.allowModelOverride ? 'block' : 'none';
+  document.getElementById('model-id-input').value = getProviderModel(currentProvider);
 }
 
 function cleanKey(raw) {
@@ -604,6 +619,11 @@ function saveKey() {
   if (!val) { showToast('请输入有效的 API Key'); return; }
   if (val !== raw.trim()) {
     showToast('⚠ Key 中含非法字符，已自动清理');
+  }
+  if (PROVIDERS[currentProvider].allowModelOverride) {
+    const modelId = document.getElementById('model-id-input').value.trim();
+    if (!modelId) { showToast('请输入已开通的模型 ID'); return; }
+    localStorage.setItem('yd_model_' + currentProvider, modelId);
   }
   localStorage.setItem('yd_api_key_' + currentProvider, val);
   localStorage.setItem('yd_provider', currentProvider);
@@ -1245,7 +1265,7 @@ async function callAPI(systemPrompt, userPrompt, onChunk) {
       body: JSON.stringify({
         provider: currentProvider,
         apiKey: key,
-        model: pv.model,
+        model: getProviderModel(currentProvider),
         systemPrompt,
         userPrompt
       })

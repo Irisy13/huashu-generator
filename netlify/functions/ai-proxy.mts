@@ -1,5 +1,5 @@
 const ARK_CHAT_COMPLETIONS_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-const DEFAULT_DOUBAO_MODEL = "doubao-seed-1-6-251015";
+const DEFAULT_DOUBAO_MODEL = "doubao-seed-2-0-lite-260215";
 
 function getEnv(name) {
   return globalThis.Netlify?.env?.get?.(name) || "";
@@ -102,6 +102,4 @@ export default async (req) => {
   });
 };
 
-export const config = {
-  path: "/api/ai-proxy",
-};
+export const config = {};
