@@ -181,6 +181,7 @@ body{font-family:'Noto Serif SC','PingFang SC',serif;background:var(--paper);col
 .pv-openai{background:#e8f5ee;color:#1a6b3a;}
 .pv-kimi{background:#f5e8f0;color:#7a1a5a;}
 .pv-qwen{background:#fdf0e0;color:#8c4a1a;}
+.pv-doubao{background:#e8f0ff;color:#254b9b;}
 
 @media(max-width:860px){
   .layout{grid-template-columns:1fr;}
@@ -197,7 +198,7 @@ body{font-family:'Noto Serif SC','PingFang SC',serif;background:var(--paper);col
 <div class="modal-overlay" id="modal">
   <div class="modal">
     <div class="modal-title">配置 AI 模型</div>
-    <div class="modal-sub">选择你使用的 AI 服务商，输入对应的 API Key。Key 仅保存在本地浏览器，不会上传到任何服务器。</div>
+    <div class="modal-sub">选择你使用的 AI 服务商，输入对应的 API Key。默认仅保存在本地浏览器；豆包因浏览器跨域限制，会通过本站 Netlify Function 转发请求但不持久化保存。</div>
 
     <div class="model-grid" id="model-grid">
       <div class="model-card active" data-provider="anthropic" onclick="selectProvider('anthropic',this)">
@@ -225,10 +226,10 @@ body{font-family:'Noto Serif SC','PingFang SC',serif;background:var(--paper);col
         <span class="mc-name">OpenAI</span>
         <div class="mc-sub">GPT-4o<br>需代理</div>
       </div>
-      <div class="model-card" data-provider="zhipu" onclick="selectProvider('zhipu',this)">
-        <div class="mc-icon">🧠</div>
-        <span class="mc-name">智谱 GLM</span>
-        <div class="mc-sub">GLM-4<br>国内直连</div>
+      <div class="model-card" data-provider="doubao" onclick="selectProvider('doubao',this)">
+        <div class="mc-icon">🌱</div>
+        <span class="mc-name">豆包</span>
+        <div class="mc-sub">火山方舟<br>代理接入</div>
       </div>
     </div>
 
@@ -463,21 +464,26 @@ const PROVIDERS = {
     tagClass:'pv-openai',
     isOpenAICompat: true
   },
-  zhipu: {
-    name:'智谱 GLM', icon:'🧠',
-    endpoint:'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-    model:'glm-4-flash',
-    keyPlaceholder:'...',
-    keyHint:'在 open.bigmodel.cn 获取，国内直连，有免费额度',
-    keyHintUrl:'https://open.bigmodel.cn',
-    tagClass:'pv-zhipu',
-    isOpenAICompat: true
+  doubao: {
+    name:'豆包 (火山方舟)', icon:'🌱',
+    endpoint:'/api/ai-proxy',
+    model:'doubao-seed-1-6-251015',
+    keyPlaceholder:'火山方舟 API Key',
+    keyHint:'在 console.volcengine.com/ark 获取；因 CORS 限制通过本站函数转发',
+    keyHintUrl:'https://console.volcengine.com/ark',
+    tagClass:'pv-doubao',
+    isOpenAICompat: true,
+    viaProxy: true
   }
 };
 
 // ── STATE ──
 let selectedType = 't1a';
-let currentProvider = localStorage.getItem('yd_provider') || 'anthropic';
+function normalizeProvider(pv) {
+  if (pv === 'zhipu') return 'doubao';
+  return PROVIDERS[pv] ? pv : 'anthropic';
+}
+let currentProvider = normalizeProvider(localStorage.getItem('yd_provider') || 'anthropic');
 let apiKey = localStorage.getItem('yd_api_key_' + currentProvider) || '';
 let history = [];
 let KB = null;
@@ -608,7 +614,7 @@ function saveKey() {
 }
 
 function updateApiStatus() {
-  currentProvider = localStorage.getItem('yd_provider') || 'anthropic';
+  currentProvider = normalizeProvider(localStorage.getItem('yd_provider') || 'anthropic');
   apiKey = localStorage.getItem('yd_api_key_' + currentProvider) || '';
   const el = document.getElementById('api-status');
   if (apiKey) {
@@ -1232,6 +1238,42 @@ async function callAPI(systemPrompt, userPrompt, onChunk) {
   const pv = PROVIDERS[currentProvider];
   const key = cleanKey(localStorage.getItem('yd_api_key_' + currentProvider) || '');
 
+  if (pv.viaProxy) {
+    const resp = await fetch(pv.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: currentProvider,
+        apiKey: key,
+        model: pv.model,
+        systemPrompt,
+        userPrompt
+      })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.message || `HTTP ${resp.status}`);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data);
+          const text = parsed.choices?.[0]?.delta?.content || '';
+          if (text) onChunk(text);
+        } catch(e) {}
+      }
+    }
+    return;
+  }
+
   if (pv.isOpenAICompat) {
     // OpenAI-compatible format
     const resp = await fetch(pv.endpoint, {
@@ -1314,7 +1356,7 @@ async function callAPI(systemPrompt, userPrompt, onChunk) {
 
 // ── GENERATE ──
 async function generate() {
-  currentProvider = localStorage.getItem('yd_provider') || 'anthropic';
+  currentProvider = normalizeProvider(localStorage.getItem('yd_provider') || 'anthropic');
   apiKey = cleanKey(localStorage.getItem('yd_api_key_' + currentProvider) || '');
   if (!apiKey) { openModal(); return; }
 
