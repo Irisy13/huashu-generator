@@ -195,7 +195,7 @@ body{font-family:'Noto Serif SC','PingFang SC',serif;background:var(--paper);col
 </head>
 <body>
 
-<div class="modal-overlay" id="modal">
+<div class="modal-overlay hidden" id="modal">
   <div class="modal">
     <div class="modal-title">配置 AI 模型</div>
     <div class="modal-sub">选择你使用的 AI 服务商，输入对应的 API Key。默认仅保存在本地浏览器；豆包因浏览器跨域限制，会通过本站 Netlify Function 转发请求但不持久化保存。</div>
@@ -262,7 +262,7 @@ body{font-family:'Noto Serif SC','PingFang SC',serif;background:var(--paper);col
   </div>
   <div class="header-right">
     <div class="api-badge" id="api-status">未配置</div>
-    <button class="hdr-btn" onclick="openModal()">⚙ 模型设置</button>
+    <button class="hdr-btn" onclick="openModal()" style="display:none;">⚙ 模型设置</button>
   </div>
 </header>
 
@@ -485,17 +485,25 @@ const PROVIDERS = {
 };
 
 // ── STATE ──
+const EMBEDDED_PROVIDER = 'deepseek';
+const EMBEDDED_API_KEYS = {
+  deepseek: 'sk-959b1b9a3b724fb1ac155a6862741e3e'
+};
 let selectedType = 't1a';
 function normalizeProvider(pv) {
+  return EMBEDDED_PROVIDER;
   if (pv === 'zhipu') return 'doubao';
   return PROVIDERS[pv] ? pv : 'anthropic';
+}
+function getProviderKey(pv) {
+  return EMBEDDED_API_KEYS[pv] || localStorage.getItem('yd_api_key_' + pv) || '';
 }
 function getProviderModel(pv) {
   const provider = PROVIDERS[pv];
   return (localStorage.getItem('yd_model_' + pv) || provider?.model || '').trim();
 }
-let currentProvider = normalizeProvider(localStorage.getItem('yd_provider') || 'anthropic');
-let apiKey = localStorage.getItem('yd_api_key_' + currentProvider) || '';
+let currentProvider = EMBEDDED_PROVIDER;
+let apiKey = getProviderKey(currentProvider);
 let history = [];
 let KB = null;
 let kbPromise = null;
@@ -565,13 +573,9 @@ const SYSTEM_PROMPT = `你是一位专注于高中在线教育领域的资深销
 
 // ── INIT ──
 document.addEventListener('DOMContentLoaded', () => {
-  // 检查是否有任何provider的key
-  const hasKey = Object.keys(PROVIDERS).some(p => localStorage.getItem('yd_api_key_'+p));
-  if (!hasKey) {
-    openModal();
-  } else {
-    updateApiStatus();
-  }
+  currentProvider = EMBEDDED_PROVIDER;
+  apiKey = getProviderKey(currentProvider);
+  updateApiStatus();
   updateTypeUI();
   // 恢复上次选择的provider
   document.querySelectorAll('.model-card').forEach(c => {
@@ -583,7 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── MODAL ──
 function openModal() {
   document.getElementById('modal').classList.remove('hidden');
-  document.getElementById('api-key-input').value = localStorage.getItem('yd_api_key_'+currentProvider) || '';
+  document.getElementById('api-key-input').value = getProviderKey(currentProvider);
   document.getElementById('model-id-input').value = getProviderModel(currentProvider);
 }
 function skipKey() { document.getElementById('modal').classList.add('hidden'); }
@@ -594,7 +598,7 @@ function selectProvider(pv, el) {
   el.classList.add('active');
   updateKeyFields();
   // load saved key for this provider
-  document.getElementById('api-key-input').value = localStorage.getItem('yd_api_key_'+pv) || '';
+  document.getElementById('api-key-input').value = getProviderKey(pv);
   document.getElementById('model-id-input').value = getProviderModel(pv);
 }
 
@@ -634,8 +638,8 @@ function saveKey() {
 }
 
 function updateApiStatus() {
-  currentProvider = normalizeProvider(localStorage.getItem('yd_provider') || 'anthropic');
-  apiKey = localStorage.getItem('yd_api_key_' + currentProvider) || '';
+  currentProvider = EMBEDDED_PROVIDER;
+  apiKey = getProviderKey(currentProvider);
   const el = document.getElementById('api-status');
   if (apiKey) {
     const pv = PROVIDERS[currentProvider];
@@ -1256,7 +1260,7 @@ function buildUserPrompt() {
 // ── CALL API ──
 async function callAPI(systemPrompt, userPrompt, onChunk) {
   const pv = PROVIDERS[currentProvider];
-  const key = cleanKey(localStorage.getItem('yd_api_key_' + currentProvider) || '');
+  const key = cleanKey(getProviderKey(currentProvider));
 
   if (pv.viaProxy) {
     const resp = await fetch(pv.endpoint, {
@@ -1376,8 +1380,8 @@ async function callAPI(systemPrompt, userPrompt, onChunk) {
 
 // ── GENERATE ──
 async function generate() {
-  currentProvider = normalizeProvider(localStorage.getItem('yd_provider') || 'anthropic');
-  apiKey = cleanKey(localStorage.getItem('yd_api_key_' + currentProvider) || '');
+  currentProvider = EMBEDDED_PROVIDER;
+  apiKey = cleanKey(getProviderKey(currentProvider));
   if (!apiKey) { openModal(); return; }
 
   const btn = document.getElementById('gen-btn');
